@@ -1,5 +1,5 @@
 // Verhoog VERSION bij elke wijziging aan de app, dan krijgt de telefoon de melding "Nieuwe versie".
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE = 'checklist-' + VERSION;
 const FILES = [
   './',

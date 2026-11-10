@@ -97,6 +97,17 @@ body.is-dragging { user-select: none; -webkit-user-select: none; cursor: grabbin
 .danger { color: var(--danger); }
 .hint { color: var(--muted); font-size: .9rem; margin: 0 0 12px; }
 
+/* Alle taken */
+.card-all { margin-bottom: 18px; border-color: var(--accent); background: var(--accent-soft); }
+main.no-addbar { padding-bottom: calc(env(safe-area-inset-bottom) + 24px); }
+.block + .block { margin-top: 28px; }
+.block-title { font-size: 1.05rem; font-weight: 650; margin: 0 0 4px; }
+.block-empty { color: var(--muted); margin: 8px 0 0; }
+.group-title { display: flex; align-items: center; gap: 10px; margin: 14px 2px 8px; color: var(--muted); font-size: .85rem; font-weight: 600; }
+.group-title span { overflow-wrap: anywhere; }
+.group-title::before { content: ""; width: 12px; border-top: 1px solid var(--line); flex: none; }
+.group-title::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+
 input[type=text] {
   border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 10px 12px; outline: none; min-width: 0;
 }
@@ -176,7 +187,7 @@ function h(tag, props, ...kids) {
     else if (v === true) el.setAttribute(k, '');
     else if (v !== false && v != null) el.setAttribute(k, v);
   }
-  for (const c of kids.flat()) if (c != null && c !== false) el.append(c.nodeType ? c : document.createTextNode(c));
+  for (const c of kids.flat(Infinity)) if (c != null && c !== false) el.append(c.nodeType ? c : document.createTextNode(c));
   return el;
 }
 const ICONS = {
@@ -286,14 +297,52 @@ function sheet(title, actions) {
 let fromHome = false, editing = false;
 const app = document.getElementById('app');
 const current = () => { const m = location.hash.match(/^#\/l\/(.+)$/); return m && S.lists.find(l => l.id === m[1]); };
+const isAll = () => location.hash === '#/alle';
 function openList(id) { fromHome = true; editing = false; location.hash = '#/l/' + id; }
+function openAll() { fromHome = true; editing = false; location.hash = '#/alle'; }
 function goHome() { editing = false; if (fromHome) history.back(); else location.replace('#/'); }
-window.addEventListener('hashchange', () => { if (!current()) { fromHome = false; editing = false; } render(); });
+window.addEventListener('hashchange', () => { if (!current() && !isAll()) { fromHome = false; editing = false; } render(); });
 
 function render() {
-  const l = current();
-  app.replaceChildren(...(l ? listView(l) : homeView()));
-  document.title = l ? l.name + ' · Checklist' : 'Checklist';
+  const l = current(), all = !l && isAll();
+  app.replaceChildren(...(l ? listView(l) : all ? allView() : homeView()));
+  document.title = l ? l.name + ' · Checklist' : all ? 'Alle taken · Checklist' : 'Checklist';
+}
+
+/* ---------- Alle taken (vaste lijst, alleen afvinken) ---------- */
+function allStats() {
+  let done = 0, total = 0;
+  for (const l of S.lists) { const s = stats(l); done += s.done; total += s.total; }
+  return { done, total };
+}
+function allView() {
+  const s = allStats(), p = s.total ? Math.round(100 * s.done / s.total) : 0;
+  const head = h('header', {}, iconBtn('back', 'Terug', goHome), h('h1', {}, 'Alle taken'));
+  const progress = s.total ? h('div', { class: 'progress' },
+    h('div', { class: 'progress-label' }, h('span', {}, s.done === s.total ? 'Alles klaar ✓' : `${s.done} van ${s.total} klaar`), h('span', {}, p + '%')),
+    h('div', { class: 'bar' }, h('i', { style: `width:${p}%` }))) : null;
+
+  // Eén blok: per lijst (in lijstvolgorde) een scheidingslijn met de naam, daaronder de taken
+  const block = (title, done, emptyText) => {
+    const groups = S.lists.map(l => ({ l, items: l.items.filter(i => i.done === done) })).filter(g => g.items.length);
+    const n = groups.reduce((a, g) => a + g.items.length, 0);
+    return h('section', { class: 'block' },
+      h('h2', { class: 'block-title' }, `${title} (${n})`),
+      groups.length
+        ? groups.map(g => [
+            h('div', { class: 'group-title' }, h('span', {}, g.l.name)),
+            h('ul', { class: 'items' }, g.items.map(it => h('li', { class: it.done ? 'done' : '' },
+              h('button', { type: 'button', class: 'row', role: 'checkbox', 'aria-checked': String(it.done),
+                onclick: () => { it.done = !it.done; save(); render(); } },
+                h('span', { class: 'box' }, icon('check', 3)), h('span', { class: 'txt' }, it.text)))))])
+        : h('p', { class: 'block-empty' }, emptyText));
+  };
+  const main = s.total
+    ? h('main', { class: 'no-addbar' }, progress,
+        block('Nog te doen', false, 'Alles is gedaan ✓'),
+        block('Gedaan', true, 'Nog niets afgevinkt'))
+    : h('main', { class: 'no-addbar' }, h('div', { class: 'empty' }, h('b', {}, 'Nog geen taken'), 'Taken uit al je lijsten verschijnen hier.'));
+  return [head, main];
 }
 
 /* ---------- Overzicht ---------- */
@@ -317,7 +366,12 @@ function homeView() {
       (a, b) => moveTo(S.lists, a, b));
     return [head, h('main', {}, h('p', { class: 'hint' }, 'Sleep aan ⋮⋮ of gebruik de pijltjes. Tik op Klaar als je klaar bent.'), rows)];
   }
-  const main = h('main', {},
+  const a = allStats();
+  const allCard = h('div', { class: 'card-li card-all' }, h('button', { type: 'button', class: 'card', onclick: openAll },
+    h('div', { class: 'card-name' }, 'Alle taken'),
+    h('div', { class: 'card-meta' }, a.total ? (a.done === a.total ? 'Alles klaar ✓' : `${a.total - a.done} nog te doen · ${a.done} gedaan`) : 'Nog geen taken'),
+    h('div', { class: 'bar' }, h('i', { style: `width:${a.total ? Math.round(100 * a.done / a.total) : 0}%` }))));
+  const main = h('main', {}, allCard,
     S.lists.length
       ? sortable(h('ul', { class: 'cards' }, S.lists.map(l => {
           const s = stats(l);
