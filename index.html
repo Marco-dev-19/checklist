@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Checklist</title>
+<meta name="description" content="Checklists maken en afvinken, ook zonder internet.">
+<meta name="theme-color" content="#1f8a5b">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+:root {
+  --bg: #f4f6f5; --surface: #ffffff; --text: #17201b; --muted: #66736c;
+  --line: #dde3df; --accent: #1f8a5b; --accent-soft: #e3f3eb; --danger: #c0392b;
+  --shadow: 0 1px 2px rgba(0,0,0,.06), 0 2px 8px rgba(0,0,0,.05);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1412; --surface: #1a211d; --text: #e7ece9; --muted: #93a19a;
+    --line: #2b3530; --accent: #3fbf86; --accent-soft: #1d3a2c; --danger: #ef6b5b;
+    --shadow: none; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1412; --surface: #1a211d; --text: #e7ece9; --muted: #93a19a;
+  --line: #2b3530; --accent: #3fbf86; --accent-soft: #1d3a2c; --danger: #ef6b5b;
+  --shadow: none; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.app { max-width: 640px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column; }
+
+header {
+  position: sticky; top: 0; z-index: 5; background: var(--bg);
+  display: flex; align-items: center; gap: 4px;
+  padding: calc(env(safe-area-inset-top) + 10px) 8px 10px;
+}
+header h1 { flex: 1; margin: 0 8px; font-size: 1.35rem; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+header .title-input { flex: 1; margin: 0 4px; font-size: 1.2rem; font-weight: 600; }
+.icon-btn {
+  width: 44px; height: 44px; flex: none; border: 0; border-radius: 12px; background: transparent;
+  display: grid; place-items: center;
+}
+.icon-btn:active { background: var(--line); }
+.icon-btn svg { width: 24px; height: 24px; }
+.text-btn { border: 0; background: transparent; color: var(--accent); font-weight: 600; padding: 10px 12px; border-radius: 10px; }
+
+main { flex: 1; padding: 0 16px 110px; }
+
+.progress { margin: 0 0 14px; }
+.progress-label { display: flex; justify-content: space-between; font-size: .9rem; color: var(--muted); margin-bottom: 6px; }
+.bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .25s; }
+
+.cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.card-li { display: flex; align-items: center; border: 1px solid var(--line); background: var(--surface); border-radius: 14px; box-shadow: var(--shadow); }
+.card { flex: 1; min-width: 0; text-align: left; border: 0; background: transparent; padding: 14px 4px 14px 16px; border-radius: 14px; display: block; }
+
+/* Slepen */
+.grip { flex: none; width: 44px; align-self: stretch; display: grid; place-items: center; color: var(--muted); touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+.grip svg { width: 20px; height: 20px; }
+.sortable > li { position: relative; transition: transform .18s ease; }
+.sortable > li.dragging { transition: none; z-index: 3; box-shadow: 0 8px 24px rgba(0,0,0,.2); border-radius: 12px; cursor: grabbing; }
+body.is-dragging { user-select: none; -webkit-user-select: none; cursor: grabbing; }
+.card-name { font-weight: 600; font-size: 1.05rem; margin-bottom: 4px; overflow-wrap: anywhere; }
+.card-meta { font-size: .88rem; color: var(--muted); margin-bottom: 8px; }
+.card .bar { height: 6px; }
+
+.items { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+.items:empty { display: none; }
+.items > li { display: flex; align-items: stretch; background: var(--surface); }
+.items > li:first-child { border-top-left-radius: 13px; border-top-right-radius: 13px; }
+.items > li:last-child { border-bottom-left-radius: 13px; border-bottom-right-radius: 13px; }
+.items li + li { border-top: 1px solid var(--line); }
+.row { flex: 1; min-width: 0; border-radius: inherit; display: flex; align-items: flex-start; gap: 12px; border: 0; background: transparent; text-align: left; padding: 13px 14px; min-height: 52px; }
+.row:active { background: var(--accent-soft); }
+.box { flex: none; width: 24px; height: 24px; margin-top: 1px; border-radius: 7px; border: 2px solid var(--muted); display: grid; place-items: center; transition: background .15s, border-color .15s; }
+.box svg { width: 16px; height: 16px; opacity: 0; stroke: #fff; }
+.done .box { background: var(--accent); border-color: var(--accent); }
+.done .box svg { opacity: 1; }
+.txt { flex: 1; overflow-wrap: anywhere; padding-top: 1px; }
+.done .txt { color: var(--muted); text-decoration: line-through; }
+
+.items > li.edit-row { display: flex; align-items: center; gap: 2px; padding: 6px 6px 6px 0; }
+.edit-row input { flex: 1; min-width: 0; }
+.edit-row .icon-btn { width: 40px; height: 40px; }
+.edit-row .icon-btn:disabled { opacity: .3; }
+.danger { color: var(--danger); }
+.hint { color: var(--muted); font-size: .9rem; margin: 0 0 12px; }
+
+input[type=text] {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 10px 12px; outline: none; min-width: 0;
+}
+input[type=text]:focus { border-color: var(--accent); }
+
+.empty { text-align: center; color: var(--muted); padding: 40px 16px; }
+.empty b { display: block; color: var(--text); font-size: 1.1rem; margin-bottom: 4px; }
+
+.addbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
+  background: var(--bg); border-top: 1px solid var(--line);
+  padding: 10px 16px calc(env(safe-area-inset-bottom) + 10px);
+}
+.addbar form { max-width: 608px; margin: 0 auto; display: flex; gap: 8px; }
+.addbar input { flex: 1; }
+.primary { border: 0; background: var(--accent); color: #fff; font-weight: 600; padding: 10px 16px; border-radius: 10px; }
+.primary:active { filter: brightness(.92); }
+
+dialog.sheet {
+  border: 0; padding: 8px; margin: auto auto 0; width: 100%; max-width: 640px;
+  background: var(--surface); color: var(--text); border-radius: 18px 18px 0 0;
+  padding-bottom: calc(env(safe-area-inset-bottom) + 8px);
+}
+dialog.sheet::backdrop { background: rgba(0,0,0,.4); }
+.sheet-title { font-size: .85rem; color: var(--muted); padding: 10px 14px 6px; }
+.sheet-btn { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 14px; border-radius: 12px; font-size: 1rem; }
+.sheet-btn:active { background: var(--line); }
+.sheet-btn.cancel { text-align: center; font-weight: 600; margin-top: 4px; border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; }
+
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 84px); z-index: 20;
+  background: #222a26; color: #fff; border-radius: 12px; padding: 10px 10px 10px 16px;
+  display: flex; align-items: center; gap: 12px; width: max-content; max-width: calc(100vw - 32px);
+  box-shadow: 0 4px 16px rgba(0,0,0,.25);
+}
+.toast button { border: 0; background: transparent; color: #7ee2b0; font-weight: 700; padding: 6px 8px; }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<input type="file" id="importFile" accept="application/json,.json" hidden>
+
+<script>
+'use strict';
+/* ---------- Opslag ---------- */
+const KEY = 'checklist-data-v1';
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+function starter() {
+  return { lists: [{ id: uid(), name: 'Mijn eerste lijst', items: [
+    { id: uid(), text: 'Tik op een taak om hem af te vinken', done: false },
+    { id: uid(), text: 'Typ onderaan een nieuwe taak', done: false },
+    { id: uid(), text: 'Via ✎ kun je taken wijzigen of verwijderen', done: false },
+  ] }] };
+}
+function valid(s) { return s && Array.isArray(s.lists); }
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (valid(s)) return s; } catch (e) {}
+  return starter();
+}
+let S = load();
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch (e) { toast('Opslaan mislukt: geheugen vol?'); }
+}
+// Vraag Android om de gegevens niet zomaar op te ruimen
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+
+/* ---------- Hulpjes ---------- */
+function h(tag, props, ...kids) {
+  const el = document.createElement(tag);
+  for (const k in props || {}) {
+    const v = props[k];
+    if (k === 'class') el.className = v;
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else if (k === 'value') el.value = v;
+    else if (v === true) el.setAttribute(k, '');
+    else if (v !== false && v != null) el.setAttribute(k, v);
+  }
+  for (const c of kids.flat()) if (c != null && c !== false) el.append(c.nodeType ? c : document.createTextNode(c));
+  return el;
+}
+const ICONS = {
+  back: '<path d="M15 5l-7 7 7 7"/>',
+  more: '<circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>',
+  up: '<path d="M6 15l6-6 6 6"/>',
+  down: '<path d="M6 9l6 6 6-6"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  grip: '<circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/>',
+};
+function icon(name, sw = 2) {
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor');
+  s.setAttribute('stroke-width', sw); s.setAttribute('stroke-linecap', 'round'); s.setAttribute('stroke-linejoin', 'round');
+  s.setAttribute('aria-hidden', 'true');
+  s.innerHTML = ICONS[name];
+  if (name === 'more' || name === 'grip') { s.setAttribute('fill', 'currentColor'); s.setAttribute('stroke', 'none'); }
+  return s;
+}
+const grip = () => h('div', { class: 'grip', 'aria-hidden': 'true', title: 'Slepen om te verplaatsen' }, icon('grip'));
+
+/* Slepen via het handvat (⋮⋮). Werkt met vinger en muis; scrolt mee bij de rand van het scherm. */
+function sortable(ul, onMove) {
+  ul.classList.add('sortable');
+  ul.addEventListener('pointerdown', e => {
+    const g = e.target.closest('.grip');
+    if (!g || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    e.preventDefault();
+    const li = g.closest('li'), lis = [...ul.children], from = lis.indexOf(li);
+    const rects = lis.map(x => x.getBoundingClientRect());
+    const gap = lis.length > 1 ? rects[1].top - rects[0].bottom : 0;
+    const shift = rects[from].height + gap;
+    const mids = rects.map(r => r.top + scrollY + r.height / 2);
+    const startY = e.clientY + scrollY;
+    const topEdge = (document.querySelector('header')?.getBoundingClientRect().bottom || 0) + 40;
+    const bottomEdge = (document.querySelector('.addbar')?.getBoundingClientRect().top || innerHeight) - 40;
+    let lastY = e.clientY, to = from, raf;
+    try { g.setPointerCapture(e.pointerId); } catch (_) {}
+    li.classList.add('dragging'); document.body.classList.add('is-dragging');
+    navigator.vibrate?.(15);
+
+    function update() {
+      const dy = lastY + scrollY - startY, mid = mids[from] + dy;
+      li.style.transform = `translateY(${dy}px)`;
+      to = 0;
+      for (let i = 0; i < lis.length; i++) if (i !== from && mids[i] < mid) to++;
+      lis.forEach((x, i) => {
+        if (i === from) return;
+        const s = from < to && i > from && i <= to ? -shift : from > to && i < from && i >= to ? shift : 0;
+        x.style.transform = s ? `translateY(${s}px)` : '';
+      });
+    }
+    function tick() {
+      const v = lastY < topEdge ? -(topEdge - lastY) / 3 : lastY > bottomEdge ? (lastY - bottomEdge) / 3 : 0;
+      if (v) { scrollBy(0, Math.max(-20, Math.min(20, v))); update(); }
+      raf = requestAnimationFrame(tick);
+    }
+    const move = ev => { lastY = ev.clientY; update(); };
+    const end = () => {
+      cancelAnimationFrame(raf);
+      g.removeEventListener('pointermove', move); g.removeEventListener('pointerup', end); g.removeEventListener('pointercancel', end);
+      document.body.classList.remove('is-dragging');
+      lis.forEach(x => { x.style.transition = 'none'; x.style.transform = ''; });
+      li.classList.remove('dragging');
+      if (to !== from) onMove(from, to);
+      else requestAnimationFrame(() => lis.forEach(x => x.style.transition = ''));
+    };
+    g.addEventListener('pointermove', move); g.addEventListener('pointerup', end); g.addEventListener('pointercancel', end);
+    raf = requestAnimationFrame(tick);
+  });
+  return ul;
+}
+function moveTo(arr, from, to) { const [x] = arr.splice(from, 1); arr.splice(to, 0, x); save(); render(); }
+const iconBtn = (name, label, onclick, cls = '') => h('button', { class: 'icon-btn ' + cls, 'aria-label': label, title: label, type: 'button', onclick }, icon(name));
+const stats = l => ({ done: l.items.filter(i => i.done).length, total: l.items.length });
+const pct = l => { const s = stats(l); return s.total ? Math.round(100 * s.done / s.total) : 0; };
+
+/* Ongedaan maken: kopie van alles vóór een verwijder-actie */
+function withUndo(msg, fn) {
+  const before = JSON.stringify(S);
+  fn(); save(); render();
+  toast(msg, 'Ongedaan maken', () => { S = JSON.parse(before); save(); render(); });
+}
+
+let toastTimer;
+function toast(msg, label, action, sticky) {
+  document.querySelector('.toast')?.remove(); clearTimeout(toastTimer);
+  const t = h('div', { class: 'toast', role: 'status' }, h('span', {}, msg),
+    label && h('button', { type: 'button', onclick: () => { t.remove(); action(); } }, label));
+  document.body.append(t);
+  if (!sticky) toastTimer = setTimeout(() => t.remove(), 5000);
+}
+
+function sheet(title, actions) {
+  const d = h('dialog', { class: 'sheet' },
+    h('div', { class: 'sheet-title' }, title),
+    actions.map(a => h('button', { type: 'button', class: 'sheet-btn' + (a.danger ? ' danger' : ''), onclick: () => { d.close(); a.run(); } }, a.label)),
+    h('button', { type: 'button', class: 'sheet-btn cancel', onclick: () => d.close() }, 'Annuleren'));
+  d.addEventListener('close', () => d.remove());
+  d.addEventListener('click', e => { if (e.target === d) d.close(); });
+  document.body.append(d); d.showModal();
+}
+
+/* ---------- Navigatie (Android-terugknop werkt via #) ---------- */
+let fromHome = false, editing = false;
+const app = document.getElementById('app');
+const current = () => { const m = location.hash.match(/^#\/l\/(.+)$/); return m && S.lists.find(l => l.id === m[1]); };
+function openList(id) { fromHome = true; editing = false; location.hash = '#/l/' + id; }
+function goHome() { editing = false; if (fromHome) history.back(); else location.replace('#/'); }
+window.addEventListener('hashchange', () => { if (!current()) { fromHome = false; editing = false; } render(); });
+
+function render() {
+  const l = current();
+  app.replaceChildren(...(l ? listView(l) : homeView()));
+  document.title = l ? l.name + ' · Checklist' : 'Checklist';
+}
+
+/* ---------- Overzicht ---------- */
+function homeView() {
+  const head = h('header', {}, h('h1', {}, 'Checklists'),
+    editing
+      ? h('button', { type: 'button', class: 'text-btn', onclick: () => { editing = false; render(); } }, 'Klaar')
+      : [S.lists.length > 1 && iconBtn('edit', 'Volgorde en namen wijzigen', () => { editing = true; render(); }),
+         iconBtn('more', 'Menu', () => sheet('Gegevens', [
+           S.lists.length > 1 && { label: 'Volgorde van lijsten wijzigen', run: () => { editing = true; render(); } },
+           { label: 'Back-up exporteren (bestand)', run: exportData },
+           { label: 'Back-up importeren', run: () => document.getElementById('importFile').click() },
+         ].filter(Boolean)))]);
+  if (editing) {
+    const rows = sortable(h('ul', { class: 'items' }, S.lists.map((l, i) => h('li', { class: 'edit-row' }, grip(),
+      h('input', { type: 'text', value: l.name, 'aria-label': 'Naam van de lijst', maxlength: 120,
+        onchange: e => { const v = e.target.value.trim(); if (v) { l.name = v; save(); } else e.target.value = l.name; } }),
+      h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Omhoog', disabled: i === 0, onclick: () => move(S.lists, i, -1) }, icon('up')),
+      h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Omlaag', disabled: i === S.lists.length - 1, onclick: () => move(S.lists, i, 1) }, icon('down')),
+      iconBtn('trash', 'Lijst verwijderen', () => withUndo(`Lijst "${l.name}" verwijderd`, () => S.lists.splice(i, 1)), 'danger')))),
+      (a, b) => moveTo(S.lists, a, b));
+    return [head, h('main', {}, h('p', { class: 'hint' }, 'Sleep aan ⋮⋮ of gebruik de pijltjes. Tik op Klaar als je klaar bent.'), rows)];
+  }
+  const main = h('main', {},
+    S.lists.length
+      ? sortable(h('ul', { class: 'cards' }, S.lists.map(l => {
+          const s = stats(l);
+          return h('li', { class: 'card-li' }, h('button', { type: 'button', class: 'card', onclick: () => openList(l.id) },
+            h('div', { class: 'card-name' }, l.name),
+            h('div', { class: 'card-meta' }, s.total ? (s.done === s.total ? 'Alles klaar ✓' : `${s.done} van ${s.total} klaar`) : 'Nog leeg'),
+            h('div', { class: 'bar' }, h('i', { style: `width:${pct(l)}%` }))),
+            S.lists.length > 1 && grip());
+        })), (a, b) => moveTo(S.lists, a, b))
+      : h('div', { class: 'empty' }, h('b', {}, 'Nog geen checklists'), 'Maak hieronder je eerste lijst.'));
+  const input = h('input', { type: 'text', placeholder: 'Nieuwe lijst…', 'aria-label': 'Naam van nieuwe lijst', enterkeyhint: 'done', maxlength: 120 });
+  const bar = h('div', { class: 'addbar' }, h('form', { onsubmit: e => {
+    e.preventDefault();
+    const name = input.value.trim(); if (!name) return input.focus();
+    const l = { id: uid(), name, items: [] };
+    S.lists.push(l); save(); openList(l.id);
+    setTimeout(() => document.getElementById('addItem')?.focus(), 50);
+  } }, input, h('button', { class: 'primary', type: 'submit' }, 'Maak')));
+  return [head, main, bar];
+}
+
+/* ---------- Eén lijst ---------- */
+function listView(l) {
+  const head = editing
+    ? h('header', {}, iconBtn('back', 'Terug', goHome),
+        h('input', { type: 'text', class: 'title-input', value: l.name, 'aria-label': 'Naam van de lijst', maxlength: 120,
+          onchange: e => { const v = e.target.value.trim(); if (v) { l.name = v; save(); } else e.target.value = l.name; } }),
+        h('button', { type: 'button', class: 'text-btn', onclick: () => { editing = false; render(); } }, 'Klaar'))
+    : h('header', {}, iconBtn('back', 'Terug', goHome), h('h1', {}, l.name),
+        iconBtn('edit', 'Bewerken', () => { editing = true; render(); }),
+        iconBtn('more', 'Menu', () => listMenu(l)));
+
+  const s = stats(l);
+  const progress = s.total ? h('div', { class: 'progress' },
+    h('div', { class: 'progress-label' }, h('span', {}, s.done === s.total ? 'Alles klaar ✓' : `${s.done} van ${s.total} klaar`), h('span', {}, pct(l) + '%')),
+    h('div', { class: 'bar' }, h('i', { style: `width:${pct(l)}%` }))) : null;
+
+  let items;
+  if (editing) {
+    items = sortable(h('ul', { class: 'items' }, l.items.map((it, i) => h('li', { class: 'edit-row' }, grip(),
+      h('input', { type: 'text', value: it.text, 'aria-label': 'Taak', maxlength: 300,
+        onchange: e => { const v = e.target.value.trim(); if (v) { it.text = v; save(); } else e.target.value = it.text; } }),
+      h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Omhoog', disabled: i === 0, onclick: () => move(l.items, i, -1) }, icon('up')),
+      h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Omlaag', disabled: i === l.items.length - 1, onclick: () => move(l.items, i, 1) }, icon('down')),
+      iconBtn('trash', 'Verwijderen', () => withUndo('Taak verwijderd', () => l.items.splice(i, 1)), 'danger')))),
+      (a, b) => moveTo(l.items, a, b));
+  } else {
+    // Open taken bovenaan, afgevinkte onderaan (volgorde blijft verder gelijk)
+    const sorted = [...l.items.filter(i => !i.done), ...l.items.filter(i => i.done)];
+    items = sortable(h('ul', { class: 'items' }, sorted.map(it => h('li', { class: it.done ? 'done' : '' },
+      h('button', { type: 'button', class: 'row', role: 'checkbox', 'aria-checked': String(it.done),
+        onclick: () => { it.done = !it.done; save(); render(); } },
+        h('span', { class: 'box' }, icon('check', 3)), h('span', { class: 'txt' }, it.text)),
+      l.items.length > 1 && grip()))),
+      // Sleep in de zichtbare volgorde; die wordt daarna de opgeslagen volgorde
+      (a, b) => { l.items = sorted; moveTo(l.items, a, b); });
+  }
+  const empty = !l.items.length && h('div', { class: 'empty' }, h('b', {}, 'Lijst is leeg'), 'Typ hieronder je eerste taak.');
+
+  const input = h('input', { type: 'text', id: 'addItem', placeholder: 'Nieuwe taak…', 'aria-label': 'Nieuwe taak', enterkeyhint: 'enter', maxlength: 300 });
+  const bar = h('div', { class: 'addbar' }, h('form', { onsubmit: e => {
+    e.preventDefault();
+    const text = input.value.trim(); if (!text) return input.focus();
+    l.items.push({ id: uid(), text, done: false }); save();
+    render(); document.getElementById('addItem').focus();   // toetsenbord blijft open voor de volgende taak
+    window.scrollTo(0, document.body.scrollHeight);
+  } }, input, h('button', { class: 'primary', type: 'submit' }, 'Voeg toe')));
+
+  return [head, h('main', {}, progress, items, empty), bar];
+}
+function move(arr, i, d) {
+  const [x] = arr.splice(i, 1); arr.splice(i + d, 0, x); save(); render();
+  // houd het verschoven element in beeld en de focus op hetzelfde pijltje, zodat je snel meerdere keren kunt tikken
+  const row = document.querySelectorAll('.edit-row')[i + d];
+  const btn = row?.querySelector(`[aria-label=${d < 0 ? 'Omhoog' : 'Omlaag'}]`);
+  if (btn && !btn.disabled) btn.focus({ preventScroll: true });
+  row?.scrollIntoView({ block: 'nearest' });
+}
+
+function listMenu(l) {
+  const s = stats(l);
+  sheet(l.name, [
+    s.done && { label: 'Alles weer uitvinken', run: () => withUndo('Alles uitgevinkt', () => l.items.forEach(i => i.done = false)) },
+    s.done && { label: `Afgevinkte taken verwijderen (${s.done})`, run: () => withUndo('Afgevinkte taken verwijderd', () => l.items = l.items.filter(i => !i.done)) },
+    { label: 'Kopie van deze lijst maken', run: () => {
+        const c = { id: uid(), name: l.name + ' (kopie)', items: l.items.map(i => ({ id: uid(), text: i.text, done: false })) };
+        S.lists.splice(S.lists.indexOf(l) + 1, 0, c); save(); location.replace('#/l/' + c.id); toast('Kopie gemaakt');
+      } },
+    { label: 'Lijst verwijderen', danger: true, run: () => {
+        const before = JSON.stringify(S);
+        S.lists = S.lists.filter(x => x !== l); save(); goHome();
+        toast('Lijst verwijderd', 'Ongedaan maken', () => { S = JSON.parse(before); save(); render(); });
+      } },
+  ].filter(Boolean));
+}
+
+/* ---------- Back-up ---------- */
+function exportData() {
+  const blob = new Blob([JSON.stringify({ app: 'checklist', version: 1, exported: new Date().toISOString(), ...S }, null, 2)], { type: 'application/json' });
+  const a = h('a', { href: URL.createObjectURL(blob), download: `checklists-${new Date().toISOString().slice(0, 10)}.json` });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+document.getElementById('importFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    if (!valid(data)) throw 0;
+    // Toevoegen, nooit overschrijven: bestaande lijsten blijven staan
+    const have = new Set(S.lists.map(l => JSON.stringify([l.name, l.items.map(i => [i.text, i.done])])));
+    let n = 0;
+    for (const l of data.lists) {
+      if (!l || typeof l.name !== 'string' || !Array.isArray(l.items)) continue;
+      const items = l.items.filter(i => i && typeof i.text === 'string').map(i => ({ id: uid(), text: i.text, done: !!i.done }));
+      const sig = JSON.stringify([l.name, items.map(i => [i.text, i.done])]);
+      if (have.has(sig)) continue;   // precies dezelfde lijst staat er al
+      S.lists.push({ id: uid(), name: l.name, items }); have.add(sig); n++;
+    }
+    save(); render();
+    toast(n ? `${n} lijst${n === 1 ? '' : 'en'} geïmporteerd` : 'Niets nieuws gevonden in dit bestand');
+  } catch (err) { toast('Dit is geen geldig back-upbestand'); }
+});
+
+// Andere tab/venster wijzigde de gegevens
+window.addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } });
+
+render();
+
+/* ---------- Offline werken + updates ---------- */
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    const ask = w => toast('Nieuwe versie beschikbaar', 'Vernieuwen', () => w.postMessage('skipWaiting'), true);
+    if (reg.waiting && navigator.serviceWorker.controller) ask(reg.waiting);
+    reg.addEventListener('updatefound', () => {
+      const w = reg.installing;
+      w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) ask(w); });
+    });
+  }).catch(() => {});
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded) { reloaded = true; location.reload(); } });
+}
+</script>
+</body>
+</html>
