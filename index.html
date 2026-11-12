@@ -135,6 +135,12 @@ dialog.sheet::backdrop { background: rgba(0,0,0,.4); }
 .sheet-title { font-size: .85rem; color: var(--muted); padding: 10px 14px 6px; }
 .sheet-btn { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 14px; border-radius: 12px; font-size: 1rem; }
 .sheet-btn:active { background: var(--line); }
+.sheet-field { display: block; padding: 4px 14px 10px; }
+.sheet-field > span { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 6px; }
+.sheet-field > div { display: flex; align-items: center; gap: 6px; }
+.sheet-field input { flex: 1; }
+.sheet-field .ext { color: var(--muted); }
+.sheet-hint { color: var(--muted); font-size: .85rem; margin: 2px 14px 6px; }
 .sheet-btn.cancel { text-align: center; font-weight: 600; margin-top: 4px; border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; }
 
 .toast {
@@ -353,7 +359,7 @@ function homeView() {
       : [S.lists.length > 1 && iconBtn('edit', 'Volgorde en namen wijzigen', () => { editing = true; render(); }),
          iconBtn('more', 'Menu', () => sheet('Gegevens', [
            S.lists.length > 1 && { label: 'Volgorde van lijsten wijzigen', run: () => { editing = true; render(); } },
-           { label: 'Back-up exporteren (bestand)', run: exportData },
+           { label: 'Back-up maken…', run: exportData },
            { label: 'Back-up importeren', run: () => document.getElementById('importFile').click() },
          ].filter(Boolean)))]);
   if (editing) {
@@ -469,31 +475,87 @@ function listMenu(l) {
 }
 
 /* ---------- Back-up ---------- */
-function exportData() {
-  const blob = new Blob([JSON.stringify({ app: 'checklist', version: 1, exported: new Date().toISOString(), ...S }, null, 2)], { type: 'application/json' });
-  const a = h('a', { href: URL.createObjectURL(blob), download: `checklists-${new Date().toISOString().slice(0, 10)}.json` });
+const cleanName = n => (n.trim().replace(/\.json$/i, '').replace(/[\\/:*?"<>|]+/g, '-').trim() || 'checklists') + '.json';
+function download(json, name) {
+  const a = h('a', { href: URL.createObjectURL(new Blob([json], { type: 'application/json' })), download: name });
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
+async function exportData() {
+  const json = JSON.stringify({ app: 'checklist', version: 1, exported: new Date().toISOString(), ...S }, null, 2);
+  const def = `checklists-${new Date().toISOString().slice(0, 10)}`;
+
+  // Computer (Chrome/Edge): het gewone "Opslaan als"-venster, daar kies je map én bestandsnaam
+  if (window.showSaveFilePicker) {
+    try {
+      const fh = await showSaveFilePicker({ suggestedName: def + '.json', id: 'checklist-backup', startIn: 'documents',
+        types: [{ description: 'Checklist-back-up', accept: { 'application/json': ['.json'] } }] });
+      const w = await fh.createWritable(); await w.write(json); await w.close();
+      toast(`Back-up opgeslagen als ${fh.name}`);
+    } catch (e) { if (e.name !== 'AbortError') toast('Opslaan mislukt'); }
+    return;
+  }
+
+  // Telefoon: zelf een naam kiezen, daarna "Opslaan in…" (map kiezen via Bestanden/Drive) of gewoon downloaden
+  const input = h('input', { type: 'text', value: def, 'aria-label': 'Bestandsnaam', maxlength: 80, autocomplete: 'off' });
+  const file = () => new File([json], cleanName(input.value), { type: 'application/json' });
+  let canShare = false;
+  try { canShare = !!navigator.canShare?.({ files: [file()] }); } catch (_) {}
+  const d = h('dialog', { class: 'sheet' },
+    h('div', { class: 'sheet-title' }, 'Back-up maken'),
+    h('label', { class: 'sheet-field' }, h('span', {}, 'Bestandsnaam'), h('div', {}, input, h('span', { class: 'ext' }, '.json'))),
+    canShare && h('button', { type: 'button', class: 'sheet-btn', onclick: async () => {
+      const f = file(); d.close();
+      try { await navigator.share({ files: [f], title: f.name }); }
+      catch (e) { if (e.name !== 'AbortError') { download(json, f.name); toast(`Opgeslagen in Downloads als ${f.name}`); } }
+    } }, 'Opslaan in… (zelf map kiezen)'),
+    h('button', { type: 'button', class: 'sheet-btn', onclick: () => { const n = cleanName(input.value); d.close(); download(json, n); toast(`Gedownload als ${n}`); } },
+      'Downloaden'),
+    h('p', { class: 'sheet-hint' }, canShare
+      ? 'Kies bij "Opslaan in…" bijvoorbeeld Bestanden of Drive; daar kies je de map. Downloaden zet het bestand in je map Downloads.'
+      : 'Het bestand komt in je map Downloads. Wil je elke keer zelf een map kiezen? Zet in Chrome → Instellingen → Downloads "Vragen waar bestanden worden opgeslagen" aan.'),
+    h('button', { type: 'button', class: 'sheet-btn cancel', onclick: () => d.close() }, 'Annuleren'));
+  d.addEventListener('close', () => d.remove());
+  d.addEventListener('click', e => { if (e.target === d) d.close(); });
+  document.body.append(d); d.showModal();
+  input.select();
+}
 document.getElementById('importFile').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  let lists;
   try {
     const data = JSON.parse(await f.text());
     if (!valid(data)) throw 0;
-    // Toevoegen, nooit overschrijven: bestaande lijsten blijven staan
-    const have = new Set(S.lists.map(l => JSON.stringify([l.name, l.items.map(i => [i.text, i.done])])));
-    let n = 0;
-    for (const l of data.lists) {
-      if (!l || typeof l.name !== 'string' || !Array.isArray(l.items)) continue;
-      const items = l.items.filter(i => i && typeof i.text === 'string').map(i => ({ id: uid(), text: i.text, done: !!i.done }));
-      const sig = JSON.stringify([l.name, items.map(i => [i.text, i.done])]);
-      if (have.has(sig)) continue;   // precies dezelfde lijst staat er al
-      S.lists.push({ id: uid(), name: l.name, items }); have.add(sig); n++;
-    }
-    save(); render();
-    toast(n ? `${n} lijst${n === 1 ? '' : 'en'} geïmporteerd` : 'Niets nieuws gevonden in dit bestand');
-  } catch (err) { toast('Dit is geen geldig back-upbestand'); }
+    lists = data.lists.filter(l => l && typeof l.name === 'string' && Array.isArray(l.items)).map(l => ({
+      name: l.name, items: l.items.filter(i => i && typeof i.text === 'string').map(i => ({ text: i.text, done: !!i.done })) }));
+    if (!lists.length) throw 0;
+  } catch (err) { return toast('Dit is geen geldig back-upbestand'); }
+
+  const count = n => `${n} lijst${n === 1 ? '' : 'en'}`;
+  if (!S.lists.length) return importLists(lists, false);
+  sheet(`${f.name}: ${count(lists.length)}. Bestaande lijsten (${S.lists.length}) eerst verwijderen?`, [
+    { label: 'Ja, eerst verwijderen en dan importeren', danger: true, run: () => importLists(lists, true) },
+    { label: 'Nee, toevoegen aan bestaande lijsten', run: () => importLists(lists, false) },
+  ]);
 });
+function importLists(lists, replace) {
+  const before = JSON.stringify(S);
+  if (replace) S.lists = [];
+  // Bij toevoegen: een lijst die er precies zo al staat wordt overgeslagen
+  const sig = l => JSON.stringify([l.name, l.items.map(i => [i.text, i.done])]);
+  const have = new Set(S.lists.map(sig));
+  let n = 0;
+  for (const l of lists) {
+    if (have.has(sig(l))) continue;
+    S.lists.push({ id: uid(), name: l.name, items: l.items.map(i => ({ id: uid(), ...i })) }); have.add(sig(l)); n++;
+  }
+  save();
+  if (current()) location.replace('#/'); else render();
+  const msg = replace ? `Bestaande lijsten verwijderd, ${n} geïmporteerd`
+    : n ? `${n} lijst${n === 1 ? '' : 'en'} geïmporteerd` : 'Niets nieuws gevonden in dit bestand';
+  if (replace || n) toast(msg, 'Ongedaan maken', () => { S = JSON.parse(before); save(); render(); });
+  else toast(msg);
+}
 
 // Andere tab/venster wijzigde de gegevens
 window.addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } });
